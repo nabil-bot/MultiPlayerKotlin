@@ -35,6 +35,7 @@ fun BrowserView(
 
     // 🔹 THE FIX: We subclass the WebView itself to override window visibility events,
     // exactly like it's done for the main app WebView in MultiScreen.kt!
+    // This stays completely alive in memory because the Composable is never removed from the graph hierarchy
     val memoizedBrowserWebView = remember {
         object : WebView(context) {
             override fun onWindowVisibilityChanged(visibility: Int) {
@@ -59,6 +60,10 @@ fun BrowserView(
                 useWideViewPort = true
                 mediaPlaybackRequiresUserGesture = false
             }
+
+            // 🔹 THE MODULAR COUPLING INTERACTION: Bind our long-press context layout menu directly here
+            com.example.multiplayer.ui.utils.BrowserContextMenuHandler(context).register(this)
+
             loadUrl(urlInput)
         }
     }

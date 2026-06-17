@@ -1,6 +1,7 @@
 package com.example.multiplayer
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
+import androidx.core.view.WindowCompat
 import com.example.multiplayer.ui.components.MainBottomBar
 import com.example.multiplayer.ui.screens.AudioScreen
 import com.example.multiplayer.ui.screens.MultiScreen
@@ -21,11 +23,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 🔹 MODULARIZED: Background play features are cleanly initialized here
+        // 🔹 Background play features remain safely intact and modularized
         BackgroundPlayManager.initialize(this)
+
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
 
         setContent {
             MultiPlayerTheme {
+                val view = androidx.compose.ui.platform.LocalView.current
+                if (!view.isInEditMode) {
+                    SideEffect {
+                        val currentWindow = (view.context as android.app.Activity).window
+
+                        WindowCompat.setDecorFitsSystemWindows(currentWindow, true)
+
+                        // 🔹 THE CRITICAL PIVOT: Set appearance controller to TRUE
+                        // true = Forces the system status icons (Time, Battery, Wi-Fi) to turn high-contrast BLACK
+                        val windowInsetsController = WindowCompat.getInsetsController(currentWindow, view)
+                        windowInsetsController.isAppearanceLightStatusBars = true
+                    }
+                }
+
                 // Single source of truth driving the persistent views
                 var currentTabRoute by remember { mutableStateOf("multi") }
 
@@ -42,10 +61,7 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .padding(innerPadding)
                     ) {
-                        // 🔹 PERSISTENT STATE LOOKUP: We retain views structurally in memory
-                        // by toggling their visibility boundaries instead of dropping state.
-
-                        // Tab 1: Multi Tab (WebView tracking state is preserved 100% safely)
+                        // Tab 1: Multi Tab
                         Box(modifier = Modifier.fillMaxSize().customVisibility(currentTabRoute == "multi")) {
                             MultiScreen()
                         }
