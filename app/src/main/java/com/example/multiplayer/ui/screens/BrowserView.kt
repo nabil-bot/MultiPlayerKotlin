@@ -27,19 +27,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 @Composable
 fun BrowserView(
     isVisible: Boolean,
-    onCloseBrowser: () -> Unit
+    onCloseBrowser: () -> Unit,
+    onAddVideoToList: (String) -> Unit, // 🔹 NEW hoisted parameter hook added here cleanly
+    onAddVideoToPlayList: (String) -> Unit
 ) {
     val context = LocalContext.current
     var urlInput by remember { mutableStateOf("https://www.youtube.com") }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // 🔹 THE FIX: We subclass the WebView itself to override window visibility events,
-    // exactly like it's done for the main app WebView in MultiScreen.kt!
-    // This stays completely alive in memory because the Composable is never removed from the graph hierarchy
     val memoizedBrowserWebView = remember {
         object : WebView(context) {
             override fun onWindowVisibilityChanged(visibility: Int) {
-                // Deceive the inner Chromium engine into thinking the browser tab is ALWAYS visible
                 super.onWindowVisibilityChanged(View.VISIBLE)
             }
         }.apply {
@@ -61,8 +59,8 @@ fun BrowserView(
                 mediaPlaybackRequiresUserGesture = false
             }
 
-            // 🔹 THE MODULAR COUPLING INTERACTION: Bind our long-press context layout menu directly here
-            com.example.multiplayer.ui.utils.BrowserContextMenuHandler(context).register(this)
+            // 🔹 MODULARITY: Pass down the context link event forward down to the independent file logic block
+            com.example.multiplayer.ui.utils.BrowserContextMenuHandler(context, onAddVideoToList, onAddVideoToPlayList).register(this)
 
             loadUrl(urlInput)
         }
@@ -136,7 +134,6 @@ fun BrowserView(
     }
 }
 
-// Collapses rendering metrics without destroying states or wiping instances from memory
 private fun Modifier.customVisibility(isVisible: Boolean): Modifier {
     return this.then(
         if (isVisible) Modifier else Modifier.layout { _, _ -> layout(0, 0) {} }

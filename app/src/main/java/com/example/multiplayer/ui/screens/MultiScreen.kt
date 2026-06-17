@@ -20,9 +20,10 @@ import org.json.JSONObject
 @Composable
 fun MultiScreen() {
     var filePathCallbackState by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-
-    // Flag driving the visibility state of our custom browser modular layout layer
     var isBrowserVisible by remember { mutableStateOf(false) }
+
+    // 🔹 THE SECRET WEAPON: Keep a direct reference handle to the main app's native WebView instance
+    var mainAppWebViewRef by remember { mutableStateOf<WebView?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
@@ -71,7 +72,6 @@ fun MultiScreen() {
                         allowFileAccess = true
                     }
 
-                    // 🔹 THE SECRET WEAPON: Inject JS interface mapping window.ReactNativeWebView.postMessage
                     addJavascriptInterface(object {
                         @JavascriptInterface
                         fun postMessage(message: String) {
@@ -79,7 +79,6 @@ fun MultiScreen() {
                                 val json = JSONObject(message)
                                 val type = json.optString("type")
 
-                                // Catch your exact web application custom signal block
                                 if (type == "VIDEO_BROWSE") {
                                     isBrowserVisible = true
                                 }
@@ -88,6 +87,9 @@ fun MultiScreen() {
                             }
                         }
                     }, "ReactNativeWebView")
+
+                    // Cache our instantiated component reference securely inside our state holder pointer
+                    mainAppWebViewRef = this
                 }
             },
             update = { webView ->
@@ -97,10 +99,24 @@ fun MultiScreen() {
             }
         )
 
-        // --- LAYER 2: OVERLAY BROWSER PANEL (Kept cached in structural stack memory layout) ---
+        // --- LAYER 2: OVERLAY BROWSER PANEL ---
+        // Pass the callback mechanism down cleanly to the modular layout frame
         BrowserView(
             isVisible = isBrowserVisible,
-            onCloseBrowser = { isBrowserVisible = false }
+            onCloseBrowser = { isBrowserVisible = false },
+            onAddVideoToList = { targetUrl ->
+                mainAppWebViewRef?.post {
+                    val script = "multiPlayerInstance.addYoutubeVideo('$targetUrl')"
+                    mainAppWebViewRef?.evaluateJavascript(script, null)
+                }
+            },
+            onAddVideoToPlayList = { targetUrl ->
+                mainAppWebViewRef?.post {
+                    val script = "multiPlayerInstance.addToYtPlaylist('$targetUrl')"
+                    mainAppWebViewRef?.evaluateJavascript(script, null)
+                }
+            }
+
         )
     }
 }
