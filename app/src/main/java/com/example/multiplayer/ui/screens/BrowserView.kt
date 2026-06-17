@@ -46,18 +46,7 @@ fun BrowserView(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     // 🔹 FIX STEP 1: Move function here and pass WebView as a parameter to avoid initialization ordering bugs
-    fun applyMuteState(webView: WebView?) {
-        webView?.evaluateJavascript(
-            """
-            (function() {
-                document.querySelectorAll('video').forEach(function(v) {
-                    v.muted = ${if (isMuted) "true" else "false"};
-                });
-            })();
-            """.trimIndent(),
-            null
-        )
-    }
+
 
     val memoizedBrowserWebView = remember {
         object : WebView(context) {
@@ -70,14 +59,30 @@ fun BrowserView(
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             webViewClient = object : WebViewClient() {
+                // 🔹 FIX 1: Intercept early lifecycle to prevent initial audio leaks
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    if (isMuted && view != null) {
+                        com.example.multiplayer.ui.utils.BrowserAudioManager.applyMute(view)
+                    }
+                }
+
+                // 🔹 FIX 2: Handle intermediate SPA AJAX shifts on YouTube
+                override fun onLoadResource(view: WebView?, url: String?) {
+                    super.onLoadResource(view, url)
+                    if (isMuted && view != null) {
+                        com.example.multiplayer.ui.utils.BrowserAudioManager.applyMute(view)
+                    }
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // 🔹 Apply tip here: Only update text from web if user isn't actively typing
                     if (!isInputFocused) {
                         url?.let { urlInput = it }
                     }
-                    // 🔹 FIX STEP 2: Pass 'view' (which is the current WebView) safely into the function
-                    applyMuteState(view as? WebView)
+                    if (isMuted && view != null) {
+                        com.example.multiplayer.ui.utils.BrowserAudioManager.applyMute(view)
+                    }
                 }
 
                 override fun doUpdateVisitedHistory(
@@ -86,12 +91,8 @@ fun BrowserView(
                     isReload: Boolean
                 ) {
                     super.doUpdateVisitedHistory(view, url, isReload)
-
-                    // 🔹 Apply tip here: Prevents auto-navigation changes from hijacking your typing input
                     if (!isInputFocused) {
-                        url?.let {
-                            urlInput = it
-                        }
+                        url?.let { urlInput = it }
                     }
                 }
             }
@@ -128,8 +129,14 @@ fun BrowserView(
                 modifier = Modifier.size(40.dp),
                 onClick = {
                     isMuted = !isMuted
-                    // 🔹 FIX STEP 3: Pass our memoized WebView instance handle cleanly
-                    applyMuteState(memoizedBrowserWebView)
+
+                    if (isMuted) {
+                        com.example.multiplayer.ui.utils.BrowserAudioManager
+                            .applyMute(memoizedBrowserWebView)
+                    } else {
+                        com.example.multiplayer.ui.utils.BrowserAudioManager
+                            .removeMute(memoizedBrowserWebView)
+                    }
                 }
             ) {
                 Icon(

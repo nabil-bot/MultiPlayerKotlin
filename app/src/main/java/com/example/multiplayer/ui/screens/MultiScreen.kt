@@ -14,16 +14,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.multiplayer.ui.utils.MediaSessionManager
 import org.json.JSONObject
 
 @Composable
 fun MultiScreen() {
+    val context = LocalContext.current
     var filePathCallbackState by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     var isBrowserVisible by remember { mutableStateOf(false) }
 
     // 🔹 THE SECRET WEAPON: Keep a direct reference handle to the main app's native WebView instance
     var mainAppWebViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    // 🔹 MODULAR HOOK: Initialize Media Session Controller Context tracking once on first presentation view load
+    LaunchedEffect(Unit) {
+        // We pass a dynamic lazy-evaluation provider closure lambda down into the Manager layer.
+        // This ensures it always grabs the latest initialized reference instance pointer target of mainAppWebViewRef,
+        // even if the underlying layout forces a dynamic layout recomposition recalculation pass.
+        MediaSessionManager.initialize(context) { mainAppWebViewRef }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
@@ -43,6 +54,7 @@ fun MultiScreen() {
             factory = { ctx ->
                 object : WebView(ctx) {
                     override fun onWindowVisibilityChanged(visibility: Int) {
+                        // Keeps background audio streams alive unconditionally
                         super.onWindowVisibilityChanged(View.VISIBLE)
                     }
                 }.apply {
@@ -87,8 +99,6 @@ fun MultiScreen() {
                             }
                         }
                     }, "ReactNativeWebView")
-
-                    // Cache our instantiated component reference securely inside our state holder pointer
                     mainAppWebViewRef = this
                 }
             },
@@ -99,8 +109,6 @@ fun MultiScreen() {
             }
         )
 
-        // --- LAYER 2: OVERLAY BROWSER PANEL ---
-        // Pass the callback mechanism down cleanly to the modular layout frame
         BrowserView(
             isVisible = isBrowserVisible,
             onCloseBrowser = { isBrowserVisible = false },
@@ -116,7 +124,6 @@ fun MultiScreen() {
                     mainAppWebViewRef?.evaluateJavascript(script, null)
                 }
             }
-
         )
     }
 }
