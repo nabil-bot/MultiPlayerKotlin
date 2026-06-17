@@ -47,6 +47,8 @@ import androidx.core.view.NestedScrollingChild3
 import androidx.core.view.ViewCompat
 import kotlin.math.abs
 
+import android.view.VelocityTracker
+
 
 private class NestedScrollWebViewContainer(
     context: android.content.Context,
@@ -60,6 +62,8 @@ private class NestedScrollWebViewContainer(
     private var isPulling = false
     private val parentOffset = IntArray(2)
     private val consumedArr = IntArray(2)
+
+    private var velocityTracker: VelocityTracker? = null
 
     init {
         isNestedScrollingEnabled = true
@@ -75,9 +79,17 @@ private class NestedScrollWebViewContainer(
             MotionEvent.ACTION_DOWN -> {
                 lastY = ev.y
                 isDragging = false
+                isPulling = false
+
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain()
+                velocityTracker?.addMovement(ev)
+
                 startNestedScroll(ViewCompat.SCROLL_AXIS_VERTICAL, ViewCompat.TYPE_TOUCH)
             }
             MotionEvent.ACTION_MOVE -> {
+                velocityTracker?.addMovement(ev)
+
                 val dy = (lastY - ev.y).toInt()
                 lastY = ev.y
 
@@ -85,9 +97,6 @@ private class NestedScrollWebViewContainer(
                     isDragging = true
                 }
 
-                // Engage pulling only when we're at the top and the user starts by
-                // dragging down. Once engaged, keep forwarding every move (down AND
-                // back up) so the user can push the indicator back and cancel.
                 if (!isPulling && isDragging && webView.scrollY == 0 && dy < 0) {
                     isPulling = true
                 }
@@ -104,12 +113,21 @@ private class NestedScrollWebViewContainer(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (isDragging) {
-                    dispatchNestedPreFling(0f, 0f)
-                    dispatchNestedFling(0f, 0f, false)
+                    velocityTracker?.addMovement(ev)
+                    velocityTracker?.computeCurrentVelocity(1000)
+                    // Vertical finger velocity; nested scroll convention here matches
+                    // our dy sign (negative = was pulling down, positive = pushing up).
+                    val velocityY = -(velocityTracker?.yVelocity ?: 0f)
+
+                    dispatchNestedPreFling(0f, velocityY)
+                    dispatchNestedFling(0f, velocityY, false)
                 }
                 isDragging = false
                 isPulling = false
                 stopNestedScroll(ViewCompat.TYPE_TOUCH)
+
+                velocityTracker?.recycle()
+                velocityTracker = null
             }
         }
         return super.dispatchTouchEvent(ev)
