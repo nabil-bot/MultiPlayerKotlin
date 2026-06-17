@@ -42,6 +42,8 @@ import androidx.core.view.NestedScrollingParentHelper
 import androidx.core.view.NestedScrollingChildHelper
 import android.view.MotionEvent
 
+import androidx.activity.compose.BackHandler
+
 
 import androidx.core.view.NestedScrollingChild3
 import androidx.core.view.ViewCompat
@@ -243,6 +245,14 @@ fun BrowserView(
         }
     }
 
+    BackHandler(enabled = isVisible) {
+        if (memoizedBrowserWebView.canGoBack()) {
+            memoizedBrowserWebView.goBack()
+        } else {
+            onCloseBrowser()
+        }
+    }
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
