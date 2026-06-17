@@ -10,11 +10,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -22,6 +22,10 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +37,27 @@ fun BrowserView(
 ) {
     val context = LocalContext.current
     var urlInput by remember { mutableStateOf("https://www.youtube.com") }
+
+    // 🔹 THE SAFEGUARD TRACKER: Tracks whether the user is actively typing in the address bar
+    var isInputFocused by remember { mutableStateOf(false) }
+
+    var isMuted by remember { mutableStateOf(false) }
+
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // 🔹 FIX STEP 1: Move function here and pass WebView as a parameter to avoid initialization ordering bugs
+    fun applyMuteState(webView: WebView?) {
+        webView?.evaluateJavascript(
+            """
+            (function() {
+                document.querySelectorAll('video').forEach(function(v) {
+                    v.muted = ${if (isMuted) "true" else "false"};
+                });
+            })();
+            """.trimIndent(),
+            null
+        )
+    }
 
     val memoizedBrowserWebView = remember {
         object : WebView(context) {
@@ -48,7 +72,27 @@ fun BrowserView(
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    url?.let { urlInput = it }
+                    // 🔹 Apply tip here: Only update text from web if user isn't actively typing
+                    if (!isInputFocused) {
+                        url?.let { urlInput = it }
+                    }
+                    // 🔹 FIX STEP 2: Pass 'view' (which is the current WebView) safely into the function
+                    applyMuteState(view as? WebView)
+                }
+
+                override fun doUpdateVisitedHistory(
+                    view: WebView?,
+                    url: String?,
+                    isReload: Boolean
+                ) {
+                    super.doUpdateVisitedHistory(view, url, isReload)
+
+                    // 🔹 Apply tip here: Prevents auto-navigation changes from hijacking your typing input
+                    if (!isInputFocused) {
+                        url?.let {
+                            urlInput = it
+                        }
+                    }
                 }
             }
             settings.apply {
@@ -76,37 +120,85 @@ fun BrowserView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onCloseBrowser) {
-                Icon(Icons.Default.Home, contentDescription = "Hide Browser")
+
+            IconButton(
+                modifier = Modifier.size(40.dp),
+                onClick = {
+                    isMuted = !isMuted
+                    // 🔹 FIX STEP 3: Pass our memoized WebView instance handle cleanly
+                    applyMuteState(memoizedBrowserWebView)
+                }
+            ) {
+                Icon(
+                    imageVector =
+                        if (isMuted)
+                            Icons.Default.VolumeOff
+                        else
+                            Icons.Default.VolumeUp,
+                    contentDescription = "Mute Browser"
+                )
             }
 
             TextField(
                 value = urlInput,
                 onValueChange = { urlInput = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+                    .onFocusChanged { focusState ->
+                        isInputFocused = focusState.isFocused
+                    },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+
+                placeholder = {
+                    Text("Search or enter URL")
+                },
+
+                trailingIcon = {
+                    if (urlInput.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                urlInput = ""
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear"
+                            )
+                        }
+                    }
+                },
+
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Go
+                ),
+
                 keyboardActions = KeyboardActions(
                     onGo = {
                         keyboardController?.hide()
-                        var formattedUrl = urlInput.trim()
-                        if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
-                            formattedUrl = "https://$formattedUrl"
-                        }
-                        memoizedBrowserWebView.loadUrl(formattedUrl)
+                        memoizedBrowserWebView.loadUrl(
+                            buildNavigationUrl(urlInput)
+                        )
                     }
                 ),
+
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent
                 )
             )
 
-            IconButton(onClick = { memoizedBrowserWebView.reload() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reload Page")
+            IconButton(
+                modifier = Modifier.size(40.dp),
+                onClick = onCloseBrowser
+            ) {
+                Icon(
+                    Icons.Default.Home,
+                    contentDescription = "Hide Browser"
+                )
             }
         }
 
@@ -138,4 +230,24 @@ private fun Modifier.customVisibility(isVisible: Boolean): Modifier {
     return this.then(
         if (isVisible) Modifier else Modifier.layout { _, _ -> layout(0, 0) {} }
     )
+}
+
+private fun buildNavigationUrl(input: String): String {
+    val text = input.trim()
+
+    return if (
+        text.contains(".") &&
+        !text.contains(" ")
+    ) {
+        if (
+            text.startsWith("http://") ||
+            text.startsWith("https://")
+        ) {
+            text
+        } else {
+            "https://$text"
+        }
+    } else {
+        "https://www.google.com/search?q=$text"
+    }
 }
