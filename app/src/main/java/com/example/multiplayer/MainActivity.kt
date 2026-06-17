@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MultiPlayerTheme {
+                // 🔹 FIX STEP 1: Dynamically listen to the system dark theme state hook
+                val isDarkTheme = isSystemInDarkTheme()
+
                 val view = androidx.compose.ui.platform.LocalView.current
                 if (!view.isInEditMode) {
                     SideEffect {
@@ -38,10 +42,11 @@ class MainActivity : ComponentActivity() {
 
                         WindowCompat.setDecorFitsSystemWindows(currentWindow, true)
 
-                        // 🔹 THE CRITICAL PIVOT: Set appearance controller to TRUE
-                        // true = Forces the system status icons (Time, Battery, Wi-Fi) to turn high-contrast BLACK
+                        // 🔹 FIX STEP 2: Invert the flag dynamically based on the active theme
+                        // Light theme -> true (Black icons)
+                        // Dark theme  -> false (White icons)
                         val windowInsetsController = WindowCompat.getInsetsController(currentWindow, view)
-                        windowInsetsController.isAppearanceLightStatusBars = true
+                        windowInsetsController.isAppearanceLightStatusBars = !isDarkTheme
                     }
                 }
 
