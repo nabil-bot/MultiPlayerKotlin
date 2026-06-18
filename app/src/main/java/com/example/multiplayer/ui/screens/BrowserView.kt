@@ -114,7 +114,6 @@ fun BrowserView(
             }
 
             setOnScrollChangeListener { _, _, scrollY, _, _ ->
-
                 val delta = scrollY - lastScrollY
 
                 when {
@@ -218,7 +217,8 @@ fun BrowserView(
                 .height(bottomBarHeight)
         ) {
             if (bottomBarHeight > 0.dp) {
-                BrowserBottomBar()
+                // 🔹 FIX: Pass down the active instance layer safely here
+                BrowserBottomBar(webView = memoizedBrowserWebView)
             }
         }
     }
