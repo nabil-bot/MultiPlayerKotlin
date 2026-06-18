@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-//import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -28,6 +27,12 @@ import com.example.multiplayer.ui.utils.NestedScrollWebViewContainer
 import com.example.multiplayer.ui.utils.buildNavigationUrl
 import com.example.multiplayer.ui.utils.customVisibility
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserView(
@@ -40,6 +45,21 @@ fun BrowserView(
     var urlInput by remember { mutableStateOf("https://www.youtube.com") }
     var isInputFocused by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
+
+    var browserBarsVisible by remember { mutableStateOf(true) }
+    var lastScrollY by remember { mutableStateOf(0) }
+
+    val topBarHeight by animateDpAsState(
+        targetValue = if (browserBarsVisible) 44.dp else 0.dp,
+        animationSpec = tween(250),
+        label = "topBarHeight"
+    )
+
+    val bottomBarHeight by animateDpAsState(
+        targetValue = if (browserBarsVisible) 40.dp else 0.dp,
+        animationSpec = tween(250),
+        label = "bottomBarHeight"
+    )
 
     // 🔹 Pull-to-refresh loading state tracker
     var isRefreshing by remember { mutableStateOf(false) }
@@ -92,6 +112,28 @@ fun BrowserView(
                     }
                 }
             }
+
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+
+                val delta = scrollY - lastScrollY
+
+                when {
+                    delta > 20 && browserBarsVisible -> {
+                        browserBarsVisible = false
+                    }
+
+                    delta < -20 && !browserBarsVisible -> {
+                        browserBarsVisible = true
+                    }
+
+                    scrollY <= 0 -> {
+                        browserBarsVisible = true
+                    }
+                }
+
+                lastScrollY = scrollY
+            }
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -119,25 +161,33 @@ fun BrowserView(
             .customVisibility(isVisible)
             .background(MaterialTheme.colorScheme.background)
     ) {
-        BrowserTopBar(
-            urlInput = urlInput,
-            onUrlValueChange = { urlInput = it },
-            isMuted = isMuted,
-            onMuteToggle = {
-                isMuted = !isMuted
-                if (isMuted) {
-                    com.example.multiplayer.ui.utils.BrowserAudioManager.applyMute(memoizedBrowserWebView)
-                } else {
-                    com.example.multiplayer.ui.utils.BrowserAudioManager.removeMute(memoizedBrowserWebView)
-                }
-            },
-            onFocusChanged = { isInputFocused = it },
-            onNavigate = {
-                keyboardController?.hide()
-                memoizedBrowserWebView.loadUrl(buildNavigationUrl(urlInput))
-            },
-            onCloseBrowser = onCloseBrowser
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(topBarHeight)
+        ) {
+            if (topBarHeight > 0.dp) {
+                BrowserTopBar(
+                    urlInput = urlInput,
+                    onUrlValueChange = { urlInput = it },
+                    isMuted = isMuted,
+                    onMuteToggle = {
+                        isMuted = !isMuted
+                        if (isMuted) {
+                            com.example.multiplayer.ui.utils.BrowserAudioManager.applyMute(memoizedBrowserWebView)
+                        } else {
+                            com.example.multiplayer.ui.utils.BrowserAudioManager.removeMute(memoizedBrowserWebView)
+                        }
+                    },
+                    onFocusChanged = { isInputFocused = it },
+                    onNavigate = {
+                        keyboardController?.hide()
+                        memoizedBrowserWebView.loadUrl(buildNavigationUrl(urlInput))
+                    },
+                    onCloseBrowser = onCloseBrowser
+                )
+            }
+        }
 
         // --- BROWSER VIEWPORT FRAME WITH SWIPE TO REFRESH ---
         PullToRefreshBox(
@@ -162,6 +212,14 @@ fun BrowserView(
             )
         }
 
-        BrowserBottomBar()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(bottomBarHeight)
+        ) {
+            if (bottomBarHeight > 0.dp) {
+                BrowserBottomBar()
+            }
+        }
     }
 }
