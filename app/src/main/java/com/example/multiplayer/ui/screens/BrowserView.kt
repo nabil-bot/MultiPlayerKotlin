@@ -67,6 +67,11 @@ private class NestedScrollWebViewContainer(
 
     private var velocityTracker: VelocityTracker? = null
 
+
+    private var startX = 0f
+    private var startY = 0f
+    private val pullEngageThreshold = touchSlop * 6   // require a bigger, deliberate pull
+
     init {
         isNestedScrollingEnabled = true
     }
@@ -80,6 +85,8 @@ private class NestedScrollWebViewContainer(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastY = ev.y
+                startX = ev.x
+                startY = ev.y
                 isDragging = false
                 isPulling = false
 
@@ -89,6 +96,7 @@ private class NestedScrollWebViewContainer(
 
                 startNestedScroll(ViewCompat.SCROLL_AXIS_VERTICAL, ViewCompat.TYPE_TOUCH)
             }
+
             MotionEvent.ACTION_MOVE -> {
                 velocityTracker?.addMovement(ev)
 
@@ -99,7 +107,16 @@ private class NestedScrollWebViewContainer(
                     isDragging = true
                 }
 
-                if (!isPulling && isDragging && webView.scrollY == 0 && dy < 0) {
+                val totalDy = ev.y - startY   // positive = moved down since gesture start
+                val totalDx = abs(ev.x - startX)
+
+                // Only engage pull-to-refresh for a deliberate, mostly-vertical, sustained
+                // downward drag while the page is pinned at the top. This filters out most
+                // accidental triggers from scrolling/dragging elements inside the page
+                // (carousels, inner lists), which tend to be smaller or more horizontal.
+                if (!isPulling && isDragging && webView.scrollY == 0 &&
+                    totalDy > pullEngageThreshold && totalDx < pullEngageThreshold
+                ) {
                     isPulling = true
                 }
 
@@ -252,7 +269,7 @@ fun BrowserView(
             onCloseBrowser()
         }
     }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
